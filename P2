@@ -1,0 +1,152 @@
+#lang plai-typed
+;;Define msl type
+;;Botan Özdemir
+(define-type msl
+  [msl-num (n : number)]
+  [msl-add (lhs : msl) (rhs : msl)]
+  [msl-mul (lhs : msl) (rhs : msl)]
+  [msl-sub (lhs : msl) (rhs : msl)]
+  ;[msl-expo (lhs : msl) (rhs : msl)]
+  )
+
+;; eval msl -> number
+;; evaluate an msl expression
+;; examples
+;; (msl-num 7) -> 7
+;; (msl-add (msl-num 5) (msl-num 6)) -> 10
+;; (msl-add (msl-add (msl-num 3) (msl-num 4)) (msl-num 35)) -> 42
+
+(define (eval [expr : msl])
+  (type-case msl expr
+    [msl-num (n) n]
+    [msl-add (lhs rhs) (+ (eval lhs) (eval rhs))]
+    [msl-sub (lhs rhs) (+ (eval lhs) (eval rhs))]
+    [msl-mul (lhs rhs) (* (eval lhs) (eval rhs))]
+    ;[msl-expo (lhs rhs) (** (eval lhs) (eval rhs))]
+    ))
+
+;;tests
+(test (eval (msl-num 7))  7)
+(test (eval (msl-add (msl-num 3) (msl-num 4)))  7)
+(test (eval (msl-add (msl-add (msl-num 3) (msl-num 4)) (msl-num 35)))  42)
+(test (eval (msl-mul (msl-num 0) (msl-num 4)))  0)
+(test (eval (msl-sub (msl-num 7) (msl-num 4)))  3)
+(test (eval (msl-add (msl-num 32) (msl-num 4)))  3)
+(test (eval (msl-num 3))  7)
+(test (eval (msl-mul (msl-num 3) (msl-num 4)))  12)
+;(test (eval (msl-expo (msl-num 3) (msl-num 4)))  12)
+
+          
+
+
+;; parse s-expression -> msl
+;; convert a quoted s expression into the equivalent msl form
+;; examples
+;; '7 -> (msl-num 7)
+;; '(+ 3 4) -> (msl-add (msl-num 3) (msl-num 4))
+;; '(+ (+ 3 4) 35) -> (msl-add (msl-add (msl-num 3) (msl-num 4)) (msl-num 35))
+(define (parse [s : s-expression]) : msl
+  (cond
+    [(s-exp-number? s) (msl-num (s-exp->number s))]
+    [(s-exp-list? s)
+     (let ([sl (s-exp->list s)])
+       (case (s-exp->symbol (first sl))
+         [(+) (msl-add (parse (second sl)) (parse (third sl)))]
+         [(*) (msl-mul (parse (second sl)) (parse (third sl)))]
+         [else (error 'parse "invalid list input")]))]
+    [else (error 'parse "invalid input")]))
+
+(test (parse '7) (msl-num 7))
+(test (parse '(+ 3 4)) (msl-add (msl-num 3) (msl-num 4)))
+(test (parse '(+ (+ 3 4) 35)) (msl-add (msl-add (msl-num 3) (msl-num 4)) (msl-num 35)))
+
+;unparser-infix
+;msl -> s-expression
+;This function takes msl type object and unparses it into infix bracketed s-expression.
+  (define (unparser-infix [expr : msl])
+    (type-case msl expr
+      (msl-num (n) (list (number->s-exp n)))
+      (msl-add (lhs rhs) (append (append (unparser-infix lhs) (list (symbol->s-exp '+))) (unparser-infix rhs)))
+      (msl-sub (lhs rhs) (append (append (unparser-infix lhs) (list (symbol->s-exp '-))) (unparser-infix rhs)))
+      (msl-mul (lhs rhs) (append (append (unparser-infix lhs) (list (symbol->s-exp '*))) (unparser-infix rhs))
+      ;(msl-exp (lhs rhs) (append (append (unparser-infix lhs) (list (symbol->s-exp '**))) (unparser-infix rhs)))
+               )
+      ))
+
+;unparser-prefix
+;msl -> s-expression
+;This function takes msl type object and unparses it into prefix bracketed s-expression.
+   (define (unparser-prefix [expr : msl]) 
+     (type-case msl expr
+       (msl-num (n) (list (number->s-exp n)))
+       (msl-add (lhs rhs) (append (list(symbol->s-exp '+)) (append (unparser-prefix lhs) (unparser-prefix rhs))))
+       (msl-sub (lhs rhs) (append (list(symbol->s-exp '-)) (append (unparser-prefix lhs) (unparser-prefix rhs))))
+       (msl-mul (lhs rhs) (append (list(symbol->s-exp '*)) (append (unparser-prefix lhs) (unparser-prefix rhs)))
+       ;(msl-exp (lhs rhs) (append (list(symbol->s-exp '**)) (append (unparser-prefix lhs) (unparser-prefix rhs))))
+       )))
+
+;;tests for unparser-prefix
+(test (unparser-prefix (msl-num 5)) (s-exp->list '(5)))
+(test (unparser-prefix (msl-add (msl-num 5) (msl-num 6))) (s-exp->list '(+ 5 6)))
+(test (unparser-prefix (msl-mul (msl-num 5) (msl-num 6))) (s-exp->list '(* 5 6)))
+(test (unparser-prefix (msl-add (msl-mul (msl-num 3) (msl-num 4)) (msl-num 9))) (s-exp->list '(+ * 3 4 9 )))
+(test (unparser-prefix (msl-mul (msl-num 3) (msl-add (msl-num 4) (msl-num 9)))) (s-exp->list '(* 3 + 4 9 )))
+
+;;tests for unparser-infix
+(test (unparser-infix (msl-num 7)) (s-exp->list '(7)))
+(test (unparser-infix (msl-add (msl-num 5) (msl-num 6))) (s-exp->list '(5 + 6)))
+(test (unparser-infix (msl-mul (msl-num 5) (msl-num 6))) (s-exp->list '(5 * 6)))
+(test (unparser-infix (msl-add (msl-mul (msl-num 3) (msl-num 4)) (msl-num 9))) (s-exp->list '(3 * 4 + 9 )))
+(test (unparser-infix (msl-mul (msl-num 3) (msl-add (msl-num 4) (msl-num 9)))) (s-exp->list '(3 * 4 + 9 )))
+
+
+;Defining ArithS
+(define-type ArithS
+  [numS (n : number)]
+  [plusS (l : ArithS) (r : ArithS)]
+  [bminusS (l : ArithS) (r : ArithS)]
+  [multS (l : ArithS) (r : ArithS)]
+  [uminusS (l : ArithS)]
+  )
+
+
+
+;desugaring with bminusS and uminusS
+;as -> s-expression
+;This function helps the calculate substraction with 2 different style
+(define (desugar [as : ArithS]) : msl
+  (type-case ArithS as
+    [numS (n) (msl-num n)]
+    [plusS (l r) (msl-add (desugar l)
+                        (desugar r))]
+    [multS (l r) (msl-mul (desugar l)
+                        (desugar r))]
+    [bminusS (l r) (msl-add (desugar l)
+                      (msl-mul (msl-num -1) (desugar r)))]
+    [uminusS (l) (desugar (bminusS (numS 0) l))]))
+
+
+;;tests for Desuggaring
+
+(test (desugar (ArithS-numS 7 )) (msl-num 7))
+(test (desugar (ArithS-plusS (ArithS-numS 7 ) (ArithS-numS 4))) (msl-num 7))
+(test (desugar (ArithS-multS (ArithS-numS 5 ) (ArithS-numS 4 ))) (msl-num 20))
+(test (desugar (ArithS-multS (ArithS-numS 6 ) (ArithS-numS 6 ))) (msl-num 36))
+(test (desugar (ArithS-plusS (ArithS-numS 5 ) (ArithS-numS 4 ))) (msl-num 10))
+(test (desugar (ArithS-bminusS (ArithS-numS 5 ) (ArithS-numS 4 ))) (msl-num 1))
+(test (desugar (ArithS-bminusS (ArithS-numS 8 ) (ArithS-numS 4 ))) (msl-num 4))
+(test (desugar (ArithS-uminusS (ArithS-numS 5 )))  (msl-num -5))
+(test (desugar (ArithS-uminusS (ArithS-numS 7 ))) (msl-num -7))
+
+
+
+
+
+
+    
+
+
+
+
+
+
